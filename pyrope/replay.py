@@ -7,6 +7,7 @@ from pyrope.netstream_property_mapping import PropertyMapper
 from pyrope.utils import read_string, UINT_32, UINT_64, FLOAT_LE_32, reverse_bytewise
 from pyrope.frame import Frame
 from pyrope.exceptions import PropertyParsingError, FrameParsingError
+import ujson
 
 '''
 Assumed File Structure:
@@ -27,6 +28,8 @@ class Replay:
         self._netstream_raw = None
         self.netstream = None
         self.crc = None
+        self.major = None
+        self.minor = None
         self.version = None
         self.patch_version = None
         self.maps = None
@@ -64,9 +67,15 @@ class Replay:
         self._replay.pos = 0  # Just reassure we are at the beginning
         header_size = self._replay.read(UINT_32)
         self.crc = self._replay.read(UINT_32)
-        self.version = str(self._replay.read(UINT_32)) + '.' + str(self._replay.read(UINT_32))
-        self.patch_version = self._replay.read(UINT_32)
-        self._header_raw = self._replay.read((header_size - 12) * 8)
+        self.major = str(self._replay.read(UINT_32))
+        self.minor = str(self._replay.read(UINT_32))
+        self.version = self.major + '.' + self.minor
+        if int(self.major) >= 868 and int(self.minor) >= 18:
+            self.patch_version = self._replay.read(UINT_32)
+            self._header_raw = self._replay.read((header_size - 12) * 8)
+        else:
+            self._header_raw = self._replay.read((header_size - 8) * 8)
+
         self._replay.read('bytes:8')  # Read and discard additional size info
         self.maps = self._decode_maps(self._replay)
         self.keyframes = self._decode_keyframes(self._replay)
@@ -220,7 +229,8 @@ class Replay:
             value_text = read_string(bitstream)
             property_value = {key_text: value_text}
         elif property_type == 'QWordProperty':
-            property_value = bitstream.read(64).uint
+            property_value = bitstream.read(64).intle
+            # print(property_value)
         elif property_type == 'BoolProperty':
             property_value = bitstream.read(8).uint == 1
         else:
@@ -239,7 +249,7 @@ class Replay:
             try:
                 frame.parse_frame(self._netstream_raw, self.objects, propertymapper)
             except FrameParsingError as e:
-                e.args += ({"LastFrameActors": frames[i-1].actors},)
+                e.args += ({"LastFrameActors": frames[i - 1].actors},)
                 raise e
             frames[i] = frame
             if qout:
@@ -265,6 +275,10 @@ class Replay:
 
     def __setstate__(self, d):
         self.__dict__.update(d)
+
+    def header_to_json(self):
+        if self.header:
+            return ujson.dumps(self.header)
 
     def netstream_to_json(self, skip_empty=True, indent=None):
         def nonempty(framedict):

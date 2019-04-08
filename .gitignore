@@ -64,3 +64,5 @@ docs/_build/
 target/
 
 test.py
+*.json
+*.backup
