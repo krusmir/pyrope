@@ -7,6 +7,7 @@ from pyrope.netstream_property_mapping import PropertyMapper
 from pyrope.utils import read_string, UINT_32, UINT_64, FLOAT_LE_32, reverse_bytewise
 from pyrope.frame import Frame
 from pyrope.exceptions import PropertyParsingError, FrameParsingError
+
 '''
 Assumed File Structure:
 4 Bytes size of header starting after CRC
@@ -21,11 +22,13 @@ Meta Data
 class Replay:
     def __init__(self, path):
         self._header_raw = None
+        self._header_raw_all = None
         self.header = None
         self._netstream_raw = None
         self.netstream = None
         self.crc = None
         self.version = None
+        self.patch_version = None
         self.maps = None
         self.keyframes = None
         self.dbg_log = None
@@ -53,9 +56,17 @@ class Replay:
     def _parse_meta(self):
         self._replay.pos = 0  # Just reassure we are at the beginning
         header_size = self._replay.read(UINT_32)
-        self.crc = self._replay.read('hex:32')
+
+        # get whole header
+        self._replay.pos = 0  # Just reassure we are at the beginning
+        self._header_raw_all = self._replay.read(header_size * 8)
+
+        self._replay.pos = 0  # Just reassure we are at the beginning
+        header_size = self._replay.read(UINT_32)
+        self.crc = self._replay.read(UINT_32)
         self.version = str(self._replay.read(UINT_32)) + '.' + str(self._replay.read(UINT_32))
-        self._header_raw = self._replay.read((header_size - 8) * 8)
+        self.patch_version = self._replay.read(UINT_32)
+        self._header_raw = self._replay.read((header_size - 12) * 8)
         self._replay.read('bytes:8')  # Read and discard additional size info
         self.maps = self._decode_maps(self._replay)
         self.keyframes = self._decode_keyframes(self._replay)
@@ -262,6 +273,7 @@ class Replay:
                 if v.actors:
                     frames[k] = v.__dict__
             return frames
+
         if skip_empty:
             return json.dumps(self,
                               default=lambda o: nonempty(self.netstream.items()),
@@ -272,15 +284,15 @@ class Replay:
 
     def metadata_to_json(self):
         d = OrderedDict([('CRC', self.crc),
-                        ('Version', self.version),
-                        ('Header', self.header),
-                        ('Maps', self.maps),
-                        ('KeyFrames', self.keyframes),
-                        ('Debug Log', self.dbg_log),
-                        ('Goal Frames', self.goal_frames),
-                        ('Packages', self.packages),
-                        ('Objects', self.objects),
-                        ('Names', self.names),
-                        ('Class Map', self.class_index_map),
-                        ('Netcache Tree', self.netcache)])
+                         ('Version', self.version),
+                         ('Header', self.header),
+                         ('Maps', self.maps),
+                         ('KeyFrames', self.keyframes),
+                         ('Debug Log', self.dbg_log),
+                         ('Goal Frames', self.goal_frames),
+                         ('Packages', self.packages),
+                         ('Objects', self.objects),
+                         ('Names', self.names),
+                         ('Class Map', self.class_index_map),
+                         ('Netcache Tree', self.netcache)])
         return json.dumps(d, indent=2)

@@ -14,6 +14,8 @@ def read_string(bitstream):
         return bitstream.read('bytes:'+str(string_len))[:-2].decode('utf-16')
     stream_bytes = bitstream.read('bytes:'+str(string_len))
     string = stream_bytes[:-1]
+    # if stream_bytes[-1] != 0:
+    print(string.decode('utf-8'))
     assert stream_bytes[-1] == 0, 'String not Zero terminated'
     try:
         return string.decode('utf-8')
