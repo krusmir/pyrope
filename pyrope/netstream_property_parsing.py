@@ -1,5 +1,6 @@
 from pyrope.utils import reverse_bytewise, BOOL, read_serialized_vector, read_float_vector
 from pyrope.exceptions import PropertyParsingError
+
 # God damn I wish python had fall through like any normal switch-case syntax <.<
 # But you know, explicit is better than implicit...yeah, fuck you
 # thanks to https://github.com/jjbott/RocketLeagueReplayParser/
@@ -120,9 +121,12 @@ parsing = {
 }
 
 
-def read_property_value(property_name, bitstream):
+def read_property_value(property_name, bitstream, major=0, minor=0, patch_version=0):
     try:
-        value = parsing[property_name](bitstream)
+        if property_name == 'TAGame.RBActor_TA:ReplicatedRBState':
+            value = _read_rigid_body_state(bitstream, major, minor, patch_version)
+        else:
+            value = parsing[property_name](bitstream)
     except KeyError:
         raise PropertyParsingError("Dont know how to parse bits for %s Have some raw Bits: %s"
                                    % (property_name, bitstream.read('hex:64')))
@@ -152,12 +156,12 @@ def _read_float(bitstream):
 
 
 def _read_string(bitstream):  # This should be in utils. But its only needed here, so yeah
-    length = _read_int(bitstream)*8
+    length = _read_int(bitstream) * 8
     if length < 0:
         length *= -2
-        return reverse_bytewise(bitstream.read('bits:'+str(length))).bytes[:-2].decode('utf-16')
+        return reverse_bytewise(bitstream.read('bits:' + str(length))).bytes[:-2].decode('utf-16')
 
-    reversed_bytes = reverse_bytewise(bitstream.read('bits:'+str(length))).bytes[:-1]
+    reversed_bytes = reverse_bytewise(bitstream.read('bits:' + str(length))).bytes[:-1]
 
     try:
         return reversed_bytes.decode('utf-8')
@@ -165,10 +169,13 @@ def _read_string(bitstream):  # This should be in utils. But its only needed her
         return reversed_bytes.decode('latin-1')
 
 
-def _read_rigid_body_state(bitstream):
+def _read_rigid_body_state(bitstream, major=0, minor=0, patch_version=0):
     flag = bitstream.read(BOOL)
     position = read_serialized_vector(bitstream)
-    rotation = read_float_vector(bitstream)
+    if (int(major), int(minor), int(patch_version)) >= (868, 22, 7):
+        pass
+    else:
+        rotation = read_float_vector(bitstream)
     result = {'flag': flag,
               'pos': position,
               'rot': rotation}

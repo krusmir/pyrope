@@ -28,10 +28,10 @@ class Replay:
         self._netstream_raw = None
         self.netstream = None
         self.crc = None
-        self.major = None
-        self.minor = None
+        self.major = 0
+        self.minor = 0
         self.version = None
-        self.patch_version = None
+        self.patch_version = 0
         self.maps = None
         self.keyframes = None
         self.dbg_log = None
@@ -247,7 +247,7 @@ class Replay:
                 return None
             frame = Frame()
             try:
-                frame.parse_frame(self._netstream_raw, self.objects, propertymapper)
+                frame.parse_frame(self._netstream_raw, self.objects, propertymapper, self.header, self.major, self.minor, self.patch_version)
             except FrameParsingError as e:
                 e.args += ({"LastFrameActors": frames[i - 1].actors},)
                 raise e
