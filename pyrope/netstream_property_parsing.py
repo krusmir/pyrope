@@ -1,4 +1,4 @@
-from pyrope.utils import reverse_bytewise, BOOL, read_serialized_vector, read_float_vector
+from pyrope.utils import reverse_bytewise, BOOL, read_serialized_vector, read_float_vector, read_quaternion
 from pyrope.exceptions import PropertyParsingError
 
 # God damn I wish python had fall through like any normal switch-case syntax <.<
@@ -21,6 +21,8 @@ parsing = {
     "TAGame.CrowdActor_TA:GameEvent": lambda x: _read_flagged_int(x),
     "TAGame.Team_TA:LogoData": lambda x: _read_flagged_int(x),
     "TAGame.CarComponent_TA:Vehicle": lambda x: _read_flagged_int(x),
+    "TAGame.GameEvent_TA:MatchTypeClass": lambda x: _read_flagged_int(x),
+    "TAGame.PRI_TA:PersistentCamera": lambda x: _read_flagged_int(x),
 
     # INT properties, seems to make sense
     "TAGame.GameEvent_Soccar_TA:SecondsRemaining": lambda x: _read_int(x),
@@ -41,6 +43,8 @@ parsing = {
     "TAGame.PRI_TA:MatchAssists": lambda x: _read_int(x),
     "ProjectX.GRI_X:ReplicatedGameMutatorIndex": lambda x: _read_int(x),
     "TAGame.PRI_TA:Title": lambda x: _read_int(x),
+    "TAGame.GameEvent_TA:ReplicatedStateName": lambda x: _read_int(x),
+    "TAGame.PRI_TA:SpectatorShortcut": lambda x: _read_int(x),
 
     # BYTE Properties
     "Engine.PlayerReplicationInfo:Ping": lambda x: _read_byte(x),
@@ -99,6 +103,7 @@ parsing = {
     "Engine.PlayerReplicationInfo:PlayerName": lambda x: _read_string(x),
     "TAGame.Team_TA:CustomTeamName": lambda x: _read_string(x),
     "TAGame.GRI_TA:NewDedicatedServerIP": lambda x: _read_string(x),
+    "ProjectX.GRI_X:MatchGUID": lambda x: _read_string(x),
 
     # S.P.E.C.I.A.L
     "TAGame.RBActor_TA:ReplicatedRBState": lambda x: _read_rigid_body_state(x),
@@ -117,14 +122,18 @@ parsing = {
     "TAGame.VehiclePickup_TA:ReplicatedPickupData": lambda x: _read_pickup(x),
     "TAGame.Car_TA:ReplicatedDemolish": lambda x: _read_demolish(x),
     "TAGame.GameEvent_Soccar_TA:ReplicatedMusicStinger": lambda x: _read_musicstinger(x),
-    "TAGame.GameEvent_SoccarPrivate_TA:MatchSettings": lambda x: _read_private_settings(x)
+    "TAGame.GameEvent_SoccarPrivate_TA:MatchSettings": lambda x: _read_private_settings(x),
+    "TAGame.Team_TA:ClubID": lambda x: _read__uint_64(x),
+    "TAGame.PRI_TA:ClubID": lambda x: _read__uint_64(x),
+    "TAGame.PRI_TA:ClientLoadoutsOnline": lambda x: _read_loadouts_online(x),
+
 }
 
 
-def read_property_value(property_name, bitstream, major=0, minor=0, patch_version=0):
+def read_property_value(property_name, bitstream, engine=0, licensee=0, patch_version=0):
     try:
         if property_name == 'TAGame.RBActor_TA:ReplicatedRBState':
-            value = _read_rigid_body_state(bitstream, major, minor, patch_version)
+            value = _read_rigid_body_state(bitstream, engine, licensee, patch_version)
         else:
             value = parsing[property_name](bitstream)
     except KeyError:
@@ -141,6 +150,11 @@ def _read_flagged_int(bitstream):
 
 def _read_int(bitstream):
     return reverse_bytewise(bitstream.read('bits:32')).intle
+
+
+def _read__uint_64(bitstream):
+    x = reverse_bytewise(bitstream.read('bits:64')).uintle
+    print(x)
 
 
 def _read_byte(bitstream):
@@ -169,11 +183,11 @@ def _read_string(bitstream):  # This should be in utils. But its only needed her
         return reversed_bytes.decode('latin-1')
 
 
-def _read_rigid_body_state(bitstream, major=0, minor=0, patch_version=0):
+def _read_rigid_body_state(bitstream, engine=0, licensee=0, patch_version=0):
     flag = bitstream.read(BOOL)
     position = read_serialized_vector(bitstream)
-    if (int(major), int(minor), int(patch_version)) >= (868, 22, 7):
-        pass
+    if (int(engine), int(licensee), int(patch_version)) >= (868, 22, 7):
+        rotation = read_quaternion(bitstream)
     else:
         rotation = read_float_vector(bitstream)
     result = {'flag': flag,
@@ -195,7 +209,18 @@ def _read_unique_id(bitstream):
     elif system == 1:  # STEAM
         uid = reverse_bytewise(bitstream.read('bits:64')).uintle
     elif system == 2:  # PS4
+        bin_uid = bitstream.read('bits:320').bin
+        uid = int(''.join(reversed(bin_uid))[:64], 2)
+    elif system == 3:  # PS3
         uid = reverse_bytewise(bitstream.read('bits:256')).hex
+    elif system == 4:  # XBOX
+        uid = reverse_bytewise(bitstream.read('bits:64')).uintle
+    elif system == 6:  # SWITCH
+        uid = reverse_bytewise(bitstream.read('bits:64')).uintle
+        unknown = reverse_bytewise(bitstream.read('bits:192')).uintle
+    elif system == 7:  # PSYNET
+        uid = reverse_bytewise(bitstream.read('bits:64')).uintle
+        unknown = reverse_bytewise(bitstream.read('bits:192')).uintle
     else:
         raise PropertyParsingError('Unknown System ID')
     splitscreen_id = _read_byte(bitstream)
@@ -225,6 +250,69 @@ def _read_loadout(bitstream):
 
 def _read_loadout_online(bitstream):
     return _read_int(bitstream), _read_int(bitstream), _read_int(bitstream)
+
+
+def _read_loadouts_online(bitstream, objects, engine=0, licensee=0, patch_version=0):
+    clo = dict()
+
+    clo["LoadOnline1"] = _read_loadout_online_new(bitstream, objects, engine, licensee, patch_version)
+    clo["LoadOnline2"] = _read_loadout_online_new(bitstream, objects, engine, licensee, patch_version)
+
+    if len(clo["LoadOnline1"]["ProductAttributeLists"]) != len(clo["LoadoutOnline2"]["ProductAttributeLists"]):
+        raise PropertyParsingError("ClientLoadoutOnline list counts must match")
+
+    clo["Unknown1"] = _read_bool(bitstream)
+    clo["Unknown2"] = _read_bool(bitstream)
+    return clo
+
+
+def _read_loadout_online_new(bitstream, objects, engine=0, licensee=0, patch_version=0):
+    clo = dict()
+    clo["ProductAttributeLists"] = list()
+    list_count = _read_byte(bitstream)
+    for i in range(list_count):
+        product_attributes = list()
+        product_attribute_count = _read_byte(bitstream)
+        for j in range(product_attribute_count):
+            product_attributes.append(_read_product_attribute(bitstream, objects, engine, licensee, patch_version))
+        clo["ProductAttributeLists"].append(product_attributes)
+    return clo
+
+
+def _read_product_attribute(bitstream, objects, engine=0, licensee=0, patch_version=0):
+    pa = dict()
+    unknown1 = _read_bool(bitstream)
+    pa['Unknown1'] = unknown1
+    class_index = _read_int(bitstream)
+    pa['ClassIndex'] = class_index
+    class_name = objects[class_index]
+    pa['ClassName'] = class_name
+
+    if class_name == 'TAGame.ProductAttribute_UserColor_TA':
+        if licensee >= 23:
+            pa["Value"] = (
+                _read_byte(bitstream),
+                _read_byte(bitstream),
+                _read_byte(bitstream),
+                _read_byte(bitstream)
+            )
+        else:
+            pa["HasValue"] = _read_bool(bitstream)
+            if pa["HasValue"]:
+                pa["Value"] = reverse_bytewise(bitstream.read('bits:31')).uintle  # br.ReadUInt32FromBits(31);
+    elif class_name == "TAGame.ProductAttribute_Painted_TA":
+        if engine >= 868 and licensee >= 18:
+            pa["Value"] = reverse_bytewise(bitstream.read('bits:31')).uintle  # br.ReadUInt32FromBits(31);
+        else:
+            pa["Value"] = _read_int(bitstream)
+    elif class_name == "TAGame.ProductAttribute_TitleID_TA":
+        pa["Value"] = _read_string(bitstream)
+    elif class_name == "TAGame.ProductAttribute_SpecialEdition_TA":
+        pa["Value"] = reverse_bytewise(bitstream.read('bits:31')).uintle  # br.ReadUInt32FromBits(31);
+    else:
+        raise PropertyParsingError("Dont know how to parse bits for %s Have some raw Bits: %s"
+                                   % (class_name, bitstream.read('hex:64')))
+    return pa
 
 
 def _read_teampaint(bitstream):
@@ -265,15 +353,32 @@ def _read_qword(bitstream):
     return _read_int(bitstream), _read_int(bitstream)
 
 
-def _read_reservations(bitstream):
+def _read_reservations(bitstream, engine=0, licensee=0, patch_version=0):
     unknown = reverse_bytewise(bitstream.read('bits:3')).hex
     system, uid, playernum = _read_unique_id(bitstream)
     name = "Not Set"
     if system != 0:
         name = _read_string(bitstream)
-    flag_1 = _read_bool(bitstream)
-    flag_2 = _read_bool(bitstream)
-    return unknown, name, flag_1, flag_2
+    if int(engine) >= 868 or int(licensee) >= 12:
+        # flag_1 = _read_bool(bitstream)
+        # flag_2 = _read_bool(bitstream)
+        unknown2 = _read_byte(bitstream)
+        return unknown, unknown2, name
+    else:
+        flag_1 = _read_bool(bitstream)
+        flag_2 = _read_bool(bitstream)
+        return unknown, name, flag_1, flag_2
+
+
+# def _read_reservations(bitstream):
+#     unknown = reverse_bytewise(bitstream.read('bits:3')).hex
+#     system, uid, playernum = _read_unique_id(bitstream)
+#     name = "Not Set"
+#     if system != 0:
+#         name = _read_string(bitstream)
+#     flag_1 = _read_bool(bitstream)
+#     flag_2 = _read_bool(bitstream)
+#     return unknown, name, flag_1, flag_2
 
 
 def _read_demolish(bitstream):

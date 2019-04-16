@@ -28,8 +28,8 @@ class Replay:
         self._netstream_raw = None
         self.netstream = None
         self.crc = None
-        self.major = 0
-        self.minor = 0
+        self.engine = 0
+        self.licensee = 0
         self.version = None
         self.patch_version = 0
         self.maps = None
@@ -67,10 +67,10 @@ class Replay:
         self._replay.pos = 0  # Just reassure we are at the beginning
         header_size = self._replay.read(UINT_32)
         self.crc = self._replay.read(UINT_32)
-        self.major = str(self._replay.read(UINT_32))
-        self.minor = str(self._replay.read(UINT_32))
-        self.version = self.major + '.' + self.minor
-        if int(self.major) >= 868 and int(self.minor) >= 18:
+        self.engine = str(self._replay.read(UINT_32))
+        self.licensee = str(self._replay.read(UINT_32))
+        self.version = self.engine + '.' + self.licensee
+        if int(self.engine) >= 868 and int(self.licensee) >= 18:
             self.patch_version = self._replay.read(UINT_32)
             self._header_raw = self._replay.read((header_size - 12) * 8)
         else:
@@ -247,7 +247,7 @@ class Replay:
                 return None
             frame = Frame()
             try:
-                frame.parse_frame(self._netstream_raw, self.objects, propertymapper, self.header, self.major, self.minor, self.patch_version)
+                frame.parse_frame(self._netstream_raw, self.objects, propertymapper, self.header, self.engine, self.licensee, self.patch_version)
             except FrameParsingError as e:
                 e.args += ({"LastFrameActors": frames[i - 1].actors},)
                 raise e

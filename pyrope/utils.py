@@ -68,6 +68,38 @@ def read_serialized_vector(bitstream):
     return x, y, z
 
 
+def uncompress_component(value):
+    num_bits = 18
+    max_quat_value = 0.7071067811865475244
+    max_value = (1 << num_bits) - 1
+
+    positive_range_value = value / max_value
+    range_value = (positive_range_value - 0.50) * 2.0
+    return range_value * max_quat_value
+
+
+def read_quaternion(bitstream):
+    largest_component = bitstream.read('bits:2').uint
+
+    a = uncompress_component(reverse_bytewise(bitstream.read(18)).uintle)
+    b = uncompress_component(reverse_bytewise(bitstream.read(18)).uintle)
+    c = uncompress_component(reverse_bytewise(bitstream.read(18)).uintle)
+
+    missing = math.sqrt(1.0 - (a * a) - (b * b) - (c * c))
+
+    if largest_component == 0:
+        return missing, a, b, c
+
+    if largest_component == 1:
+        return a, missing, b, c
+
+    if largest_component == 2:
+        return a, b, missing, c
+
+    if largest_component == 3:
+        return a, b, c, missing
+
+
 def read_byte_vector(bitstream):
     x = y = z = 0
     if bitstream.read(BOOL):

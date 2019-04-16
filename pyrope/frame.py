@@ -1,8 +1,8 @@
 from collections import OrderedDict
 
-from pyrope.netstream_property_parsing import read_property_value
+from pyrope.netstream_property_parsing import read_property_value, _read_reservations, _read_loadouts_online
 from pyrope.utils import (reverse_bytewise, BOOL, read_serialized_vector,
-                          read_byte_vector, read_serialized_int, read_uint32_max)
+                          read_byte_vector, read_serialized_int, read_uint32_max, )
 from pyrope.exceptions import FrameParsingError, PropertyParsingError
 
 
@@ -14,17 +14,17 @@ class Frame:
         self.delta = None
         self.actors = None
         self.header = None
-        self.major = 0
-        self.minor = 0
-        self.patch_version= 0
+        self.engine = 0
+        self.licensee = 0
+        self.patch_version = 0
         self.maxchannels = None
 
-    def parse_frame(self, netstream, objects, propertymapper, header, major, minor, patch_version):
+    def parse_frame(self, netstream, objects, propertymapper, header, engine, licensee, patch_version):
         self.header = header
         self.maxchannels = header["MaxChannels"]
-        self.major = major
-        self.minor = minor
-        self.patch_version= patch_version
+        self.engine = engine
+        self.licensee = licensee
+        self.patch_version = patch_version
         self.current = reverse_bytewise(netstream.read('bits:32')).floatle
         self.delta = reverse_bytewise(netstream.read('bits:32')).floatle
         # if self.current < 0.001 or self.delta < 0.001:
@@ -42,7 +42,7 @@ class Frame:
             if not actor_present:
                 break
 
-            if int(self.major) > 868 or int(self.major) == 868 and int(self.minor) >= 14:
+            if int(self.engine) > 868 or int(self.engine) == 868 and int(self.licensee) >= 14:
                 pos = netstream.pos
                 actorid = reverse_bytewise(netstream.read('bits:10')).uintle
                 print("pos 1", netstream.pos)
@@ -116,8 +116,15 @@ class Frame:
             # print(property_name)
             try:
                 if property_name == 'TAGame.RBActor_TA:ReplicatedRBState':
-                    property_value = read_property_value(property_name, netstream, self.major, self.minor, self.patch_version)
+                    property_value = read_property_value(property_name, netstream, self.engine, self.licensee,
+                                                         self.patch_version)
+                elif property_name == 'ProjectX.GRI_X:Reservations':
+                    property_value = _read_reservations(netstream, self.engine, self.licensee, self.patch_version)
+                elif property_name == 'TAGame.PRI_TA:ClientLoadoutsOnline':
+                    property_value = _read_loadouts_online(netstream, objects, self.engine, self.licensee,
+                                                           self.patch_version)
                 else:
+                    print(property_name)
                     property_value = read_property_value(property_name, netstream)
             except PropertyParsingError as e:
                 e.args += ({"Props_till_err": properties},)
@@ -127,7 +134,7 @@ class Frame:
 
     def _parse_new_actor(self, netstream, objects):
         actor = {}
-        if int(self.major) > 868 or int(self.major) == 868 and int(self.minor) >= 14:
+        if int(self.engine) > 868 or int(self.engine) == 868 and int(self.licensee) >= 14:
             actor['nameid'] = reverse_bytewise(netstream.read('bits:32')).uintle
             if actor['nameid'] == 38:
                 print(actor)
