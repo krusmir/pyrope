@@ -126,6 +126,7 @@ parsing = {
     "TAGame.Team_TA:ClubID": lambda x: _read__uint_64(x),
     "TAGame.PRI_TA:ClubID": lambda x: _read__uint_64(x),
     "TAGame.PRI_TA:ClientLoadoutsOnline": lambda x: _read_loadouts_online(x),
+    "TAGame.PRI_TA:ClientLoadouts": lambda x: _read_loadouts(x),
 
 }
 
@@ -142,6 +143,40 @@ def read_property_value(property_name, bitstream, engine=0, licensee=0, patch_ve
     return value
 
 
+def _read_loadouts(bitstream, version=0):
+    cl = dict()
+
+    cl["Version"] = _read_byte(bitstream)
+    cl["BodyProductId"] = _read_uint_32(bitstream)
+    cl["SkinProductId"] = _read_uint_32(bitstream)
+    cl["WheelProductId"] = _read_uint_32(bitstream)
+    cl["BoostProductId"] = _read_uint_32(bitstream)
+    cl["AntennaProductId"] = _read_uint_32(bitstream)
+    cl["HatProductId"] = _read_uint_32(bitstream)
+    cl["Unknown2"] = _read_uint_32(bitstream)
+
+    if int(version) > 10:
+        cl["Unknown3"] = _read_uint_32(bitstream)
+
+    if int(version) >= 16:
+        cl["EngineAudioProductId"] = _read_uint_32(bitstream)
+        cl["TrailProductId"] = _read_uint_32(bitstream)
+        cl["GoalExplosionProductId"] = _read_uint_32(bitstream)
+
+    if int(version) >= 17:
+        cl["BannerProductId"] = _read_uint_32(bitstream)
+
+    if int(version) >= 19:
+        cl["Unknown4"] = _read_uint_32(bitstream)
+
+    if int(version) >= 22:
+        cl["Unknown5"] = _read_uint_32(bitstream)
+        cl["Unknown6"] = _read_uint_32(bitstream)
+        cl["Unknown7"] = _read_uint_32(bitstream)
+
+    return cl
+
+
 def _read_flagged_int(bitstream):
     flag = bitstream.read(BOOL)
     num = _read_int(bitstream)
@@ -150,6 +185,10 @@ def _read_flagged_int(bitstream):
 
 def _read_int(bitstream):
     return reverse_bytewise(bitstream.read('bits:32')).intle
+
+
+def _read_uint_32(bitstream):
+    return reverse_bytewise(bitstream.read('bits:32')).uintle
 
 
 def _read__uint_64(bitstream):
@@ -255,10 +294,10 @@ def _read_loadout_online(bitstream):
 def _read_loadouts_online(bitstream, objects, engine=0, licensee=0, patch_version=0):
     clo = dict()
 
-    clo["LoadOnline1"] = _read_loadout_online_new(bitstream, objects, engine, licensee, patch_version)
-    clo["LoadOnline2"] = _read_loadout_online_new(bitstream, objects, engine, licensee, patch_version)
+    clo["LoadoutOnline1"] = _read_loadout_online_new(bitstream, objects, engine, licensee, patch_version)
+    clo["LoadoutOnline2"] = _read_loadout_online_new(bitstream, objects, engine, licensee, patch_version)
 
-    if len(clo["LoadOnline1"]["ProductAttributeLists"]) != len(clo["LoadoutOnline2"]["ProductAttributeLists"]):
+    if len(clo["LoadoutOnline1"]["ProductAttributeLists"]) != len(clo["LoadoutOnline2"]["ProductAttributeLists"]):
         raise PropertyParsingError("ClientLoadoutOnline list counts must match")
 
     clo["Unknown1"] = _read_bool(bitstream)
@@ -289,7 +328,7 @@ def _read_product_attribute(bitstream, objects, engine=0, licensee=0, patch_vers
     pa['ClassName'] = class_name
 
     if class_name == 'TAGame.ProductAttribute_UserColor_TA':
-        if licensee >= 23:
+        if int(licensee) >= 23:
             pa["Value"] = (
                 _read_byte(bitstream),
                 _read_byte(bitstream),
@@ -301,7 +340,7 @@ def _read_product_attribute(bitstream, objects, engine=0, licensee=0, patch_vers
             if pa["HasValue"]:
                 pa["Value"] = reverse_bytewise(bitstream.read('bits:31')).uintle  # br.ReadUInt32FromBits(31);
     elif class_name == "TAGame.ProductAttribute_Painted_TA":
-        if engine >= 868 and licensee >= 18:
+        if int(engine) >= 868 and int(licensee) >= 18:
             pa["Value"] = reverse_bytewise(bitstream.read('bits:31')).uintle  # br.ReadUInt32FromBits(31);
         else:
             pa["Value"] = _read_int(bitstream)

@@ -1,6 +1,6 @@
 from collections import OrderedDict
 
-from pyrope.netstream_property_parsing import read_property_value, _read_reservations, _read_loadouts_online
+from pyrope.netstream_property_parsing import read_property_value, _read_reservations, _read_loadouts_online, _read_loadouts
 from pyrope.utils import (reverse_bytewise, BOOL, read_serialized_vector,
                           read_byte_vector, read_serialized_int, read_uint32_max, )
 from pyrope.exceptions import FrameParsingError, PropertyParsingError
@@ -113,7 +113,7 @@ class Frame:
             property_name = objects[propertymapper.get_property_name(actor_type, property_id)]
 
             # print(property_name_0)
-            # print(property_name)
+            print(property_name)
             try:
                 if property_name == 'TAGame.RBActor_TA:ReplicatedRBState':
                     property_value = read_property_value(property_name, netstream, self.engine, self.licensee,
@@ -123,8 +123,10 @@ class Frame:
                 elif property_name == 'TAGame.PRI_TA:ClientLoadoutsOnline':
                     property_value = _read_loadouts_online(netstream, objects, self.engine, self.licensee,
                                                            self.patch_version)
+                elif property_name == 'TAGame.PRI_TA:ClientLoadouts':
+                    property_value = _read_loadouts(netstream, self.patch_version)
                 else:
-                    print(property_name)
+                    # print(property_name)
                     property_value = read_property_value(property_name, netstream)
             except PropertyParsingError as e:
                 e.args += ({"Props_till_err": properties},)
